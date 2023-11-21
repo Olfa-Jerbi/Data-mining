@@ -1,0 +1,358 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+df=pd.read_csv("dat.csv",dtype={"Bare_Nuclei": int, "dtype":int})
+df.head()
+
+# dimensions
+df.shape
+# Redéfinir les types
+df.count()
+df
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+def encode_target(df, target_column):
+    """Add column to df with integers for the target.
+
+    Args
+    ----
+    df -- pandas DataFrame.
+    target_column -- column to map to int, producing
+                     new Target column.
+
+    Returns
+    -------
+    df_mod -- modified DataFrame.
+    targets -- list of target names.
+    """
+    df_mod = df.copy()
+    targets = df_mod[target_column].unique()
+    map_to_int = {name: n for n, name in enumerate(targets)}
+    df_mod["Target"] = df_mod[target_column].replace(map_to_int)
+
+    return (df_mod, targets)
+df2, targets = encode_target(df, "Class")
+features = list(df2.columns[:9])
+y = df2["Target"]
+x = df2[features]
+
+#séparation des variables explicatives et de la variable à expliquer 
+#df.data=df[df.columns[0:9]] 
+#df.target=df.loc[:,'Class']
+#x=df[df.columns[0:9]] 
+#y=df.loc[:,'Class']
+#print(df.data)
+#print(df.target)
+
+from sklearn.decomposition import PCA
+# définition de la commande
+pca = PCA()
+# Estimation, calcul des composantes principales
+C = pca.fit(x).transform(x)
+
+#les valeurs propres exprimées en pourcentage de la variance expliquée
+print(pca.explained_variance_ratio_)
+plt.plot(pca.explained_variance_ratio_)
+plt.show()
+
+#Boxlot des variables
+plt.boxplot(C[:,0:20])
+plt.show()
+
+
+
+
+#Représentation des classes en prenant compte des 2 axes factoriels de l'ACP
+plt.scatter(C[:,0], C[:,1], c=y, label='figure scatter')
+plt.show()
+
+#Présentation en 3D des classes après ACP et en prenant la classification originale
+from mpl_toolkits.mplot3d import Axes3D
+fig = plt.figure(1, figsize=(8, 6))
+ax = Axes3D(fig, elev=-150, azim=110)
+ax.scatter(C[:, 0], C[:, 1], C[:, 2], c=y,
+cmap=plt.cm.Paired)
+ax.set_title("ACP: trois premieres composantes")
+ax.set_xlabel("Comp1")
+ax.w_xaxis.set_ticklabels([])
+ax.set_ylabel("Comp2")
+ax.w_yaxis.set_ticklabels([])
+ax.set_zlabel("Comp3")
+ax.w_zaxis.set_ticklabels([])
+plt.show()
+
+#classification non supervisée avec kmeans
+from sklearn.cluster import KMeans
+from sklearn.metrics import confusion_matrix
+est=KMeans(n_clusters=2)
+est.fit(x)
+classe=est.labels_
+print(classe)
+plt.scatter(C[:,0], C[:,1], c=classe, label='figure scatter')
+plt.show()
+
+
+#tableau croisé et matrice de confusion
+table=pd.crosstab(classe,df["Class"])
+print(table)
+plt.matshow(table)
+plt.title("Matrice de Confusion")
+plt.colorbar()
+plt.show()
+
+#Présentation en 3D des classes après ACP  et en prenant la classification donnée par Kmeans
+fig = plt.figure(1, figsize=(8, 6))
+ax = Axes3D(fig, elev=-150, azim=110)
+ax.scatter(C[:, 0], C[:, 1], C[:, 2], c=classe,
+cmap=plt.cm.Paired)
+ax.set_title("ACP: trois premieres composantes")
+ax.set_xlabel("Comp1")
+ax.w_xaxis.set_ticklabels([])
+ax.set_ylabel("Comp2")
+ax.w_yaxis.set_ticklabels([])
+ax.set_zlabel("Comp3")
+ax.w_zaxis.set_ticklabels([])
+plt.show()
+
+
+#Extraction des échantillons
+from sklearn.model_selection import train_test_split
+X_train,X_test,y_train,y_test=train_test_split(x,y,
+test_size=0.25,random_state=11)
+# Table de départ
+df.head()
+
+
+# variables explicatives
+T=df.drop(["Class"],axis=1)
+# Variable à modéliser
+z=df["Class"]
+# Extractions
+T_train,T_test,z_train,z_test=train_test_split(T,z,
+test_size=0.2,random_state=11)
+
+
+#KNN
+from sklearn.neighbors import KNeighborsClassifier
+knn = KNeighborsClassifier(n_neighbors=10)
+digit_knn=knn.fit(X_train, y_train)
+# Estimation de l’erreur de prévision
+# sur l’échantillon test
+1-digit_knn.score(X_test,y_test)
+
+from sklearn.model_selection import learning_curve, GridSearchCV
+# grille de valeurs
+param=[{"n_neighbors":list(range(1,15))}]
+knn= GridSearchCV(KNeighborsClassifier(),
+param,cv=5,n_jobs=-1)
+digit_knn=knn.fit(X_train, y_train)
+# paramètre optimal
+digit_knn.best_params_["n_neighbors"]
+
+knn = KNeighborsClassifier(n_neighbors=
+digit_knn.best_params_["n_neighbors"])
+digit_knn=knn.fit(X_train, y_train)
+# Estimation de l’erreur de prévision
+print("knn error ")
+print(1-digit_knn.score(X_test,y_test))
+# Prévision
+y_chap = digit_knn.predict(X_test)
+print(y_chap)
+# matrice de confusion
+table=pd.crosstab(y_test,y_chap)
+print(table)
+plt.matshow(table)
+plt.title("Matrice de Confusion")
+plt.colorbar()
+plt.show()
+
+
+
+
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+#Régression logistique
+from sklearn.linear_model import LogisticRegression
+logit = LogisticRegression()
+bcancer_logit=logit.fit(T_train, z_train)
+# Erreur
+bcancer_logit.score(T_test, z_test)
+# Coefficients
+bcancer_logit.coef_
+# grille de valeurs
+param=[{"C":[0.01,0.05,0.1,0.15,1,10]}]
+logit = GridSearchCV(LogisticRegression(penalty="l1",solver="liblinear"),param,cv=5,n_jobs=-1)
+bcancer_logit=logit.fit(T_train, z_train)
+# paramètre optimal
+bcancer_logit.best_params_["C"]
+logit = LogisticRegression(penalty="l1",C=0.98,solver="liblinear")
+bcancer_logit=logit.fit(T_train, z_train)
+# Erreur
+print("Logistic regression error ")
+print(1- bcancer_logit.score(T_test, z_test))
+# Coefficients
+print(bcancer_logit.coef_)
+
+
+
+
+import numpy as np
+#Arbre de décision
+from sklearn.tree import DecisionTreeClassifier
+tree=DecisionTreeClassifier(max_leaf_nodes=2, random_state=0)
+digit_tree=tree.fit(T_train, z_train)
+# Estimation de l’erreur de prévision
+1-digit_tree.score(T_test,z_test)
+print(" decision tree error")
+print(1-digit_tree.score(T_test,z_test))
+#print(digit_tree.classes_)
+#print(digit_tree.tree_)
+
+#from sklearn import tree
+#digit_tree.plot_tree(clf.fit(x, y)) 
+
+
+n_nodes = tree.tree_.node_count
+children_left = tree.tree_.children_left
+children_right = tree.tree_.children_right
+feature = tree.tree_.feature
+threshold = tree.tree_.threshold
+
+# The tree structure can be traversed to compute various properties such
+# as the depth of each node and whether or not it is a leaf.
+node_depth = np.zeros(shape=n_nodes, dtype=np.int64)
+is_leaves = np.zeros(shape=n_nodes, dtype=bool)
+stack = [(0, -1)]  # seed is the root node id and its parent depth
+while len(stack) > 0:
+    node_id, parent_depth = stack.pop()
+    node_depth[node_id] = parent_depth + 1
+
+    # If we have a test node
+    if (children_left[node_id] != children_right[node_id]):
+        stack.append((children_left[node_id], parent_depth + 1))
+        stack.append((children_right[node_id], parent_depth + 1))
+    else:
+        is_leaves[node_id] = True
+
+print("The binary tree structure has %s nodes and has "
+      "the following tree structure:"
+      % n_nodes)
+for i in range(n_nodes):
+    if is_leaves[i]:
+        print("%snode=%s leaf node." % (node_depth[i] * "\t", i))
+    else:
+        print("%snode=%s test node: go to node %s if X[:, %s] <= %s else to "
+              "node %s."
+              % (node_depth[i] * "\t",
+                 i,
+                 children_left[i],
+                 feature[i],
+                 threshold[i],
+                 children_right[i],
+                 ))
+print()
+
+# First let's retrieve the decision path of each sample. The decision_path
+# method allows to retrieve the node indicator functions. A non zero element of
+# indicator matrix at the position (i, j) indicates that the sample i goes
+# through the node j.
+
+node_indicator = tree.decision_path(X_test)
+
+# Similarly, we can also have the leaves ids reached by each sample.
+
+leave_id = tree.apply(X_test)
+
+# Now, it's possible to get the tests that were used to predict a sample or
+# a group of samples. First, let's make it for the sample.
+
+sample_id = 0
+node_index = node_indicator.indices[node_indicator.indptr[sample_id]:
+                                    node_indicator.indptr[sample_id + 1]]
+
+print('Rules used to predict sample %s: ' % sample_id)
+
+
+
+from sklearn.model_selection import learning_curve, GridSearchCV
+param=[{"max_depth":list(range(2,10))}]
+bcancer_tree= GridSearchCV(DecisionTreeClassifier(),param,cv=5,n_jobs=-1)
+bcancer_opt_tree=bcancer_tree.fit(T_train, z_train)
+# paramètre optimal
+print(bcancer_opt_tree.best_params_)
+tree=DecisionTreeClassifier(max_depth=3)
+bcancer_tree=tree.fit(T_train, z_train)
+
+# Estimation de l’erreur de prévision
+# sur l’échantillon test
+print("optimal decision tree error")
+print(1-bcancer_tree.score(T_test,z_test))
+import os     
+
+os.environ["PATH"] += os.pathsep + 'C:/Program Files (x86)/Graphviz2.38/bin/'
+from sklearn.tree import export_graphviz
+from sklearn.externals.six import StringIO
+import pydotplus
+dot_data = StringIO()
+#x=df[df.columns[0:9]] 
+#y=df.loc[:,'Class']
+
+a=list(targets)
+# Combiner toutes les String de la liste
+strList =[2,4]
+str = ' '.join(str(elem) for elem in strList) 
+export_graphviz(bcancer_tree, out_file=dot_data,
+                feature_names=features,
+                class_names = str,
+                rounded = True, proportion = False, 
+                precision = 2, filled = True)
+graph=pydotplus.graph_from_dot_data(dot_data.getvalue())
+graph.write_png("bcancer_tree-1.png")
+
+
+dot_data = StringIO()
+export_graphviz(digit_tree, out_file=dot_data,feature_names=features,
+                class_names = str,
+                rounded = True, proportion = False, 
+                precision = 2, filled = True)
+graph=pydotplus.graph_from_dot_data(dot_data.getvalue())
+graph.write_png("bcancer_tree_2.png")
+
+
+
+
+#Random forest
+from sklearn.ensemble import RandomForestClassifier
+# définition des paramètres
+forest = RandomForestClassifier(n_estimators=500,
+criterion="gini", max_depth=None,
+min_samples_split=2, min_samples_leaf=1,
+max_features="auto", max_leaf_nodes=2,
+bootstrap=True, oob_score=True)
+# apprentissage
+forest_t = forest.fit(X_train,y_train)
+print("random forest error ")
+print(1-forest.oob_score_)
+# erreur de prévision sur le test
+#print("random forest error")
+#print(1-forest.score(X_test,y_test))
+
+
+#tree=DecisionTreeClassifier(max_leaf_nodes=2, random_state=0)
+#digit_tree=tree.fit(T_train, z_train)
+
+#dot_data = StringIO()
+#export_graphviz(forest_t, out_file=dot_data,feature_names=features,
+                #class_names = str,
+                #rounded = True, proportion = False, 
+               # precision = 2, filled = True)
+#graph=pydotplus.graph_from_dot_data(dot_data.getvalue())
+#graph.write_png("bcancer_tree_3.png")
+
+#tree.export_graphviz(f_tree.estimators_[0], out_file='tree_from_forest.dot')
+#(graph,) = pydot.graph_from_dot_file('tree_from_forest.dot')
+#graph.write_png('tree_from_forest.png')
+
+#from sklearn.tree import convert_to_graphviz
+#import graphviz
+
+#graphviz.Source(export_graphviz(forest))
